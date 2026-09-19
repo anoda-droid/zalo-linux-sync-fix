@@ -8,6 +8,30 @@ macOS → Linux.
 > Chạy client không chính thức có thể vi phạm điều khoản sử dụng của Zalo — nên
 > thử bằng tài khoản phụ trước.
 
+## 0. Cách nhanh nhất — tải 1 file, chạy như file .exe
+
+Vào **[Releases](https://github.com/anoda-droid/zalo-linux-sync-fix/releases)**,
+tải file `Zalo-<phiên bản>-syncfix-x86_64.AppImage` (~243MB, **đã vá sẵn**):
+
+```bash
+sudo apt install -y libfuse2          # bắt buộc (Ubuntu 22.04+/Mint 21+/Zorin 17+)
+chmod +x Zalo-*-syncfix-x86_64.AppImage
+./Zalo-*-syncfix-x86_64.AppImage --no-sandbox
+```
+
+Hoặc không dùng dòng lệnh: chuột phải file → **Properties → Permissions → tick
+"Allow executing file"**, rồi **double-click** — giống hệt mở file `.exe` bên Windows.
+
+Muốn có icon trong menu ứng dụng (như cài đặt thật):
+
+* Cài **GearLever** (Ubuntu/Mint/Zorin — `flatpak install flathub it.mijorus.gearlever`)
+  rồi bấm **Integrate**; hoặc **AppImageLauncher**.
+* Hoặc chạy `./install.sh` — tự tải, vá và tạo mục Zalo trong menu.
+
+File này được tạo tự động bằng CI (xem `.github/workflows/build-appimage.yml`), mỗi khi
+Zalo ra bản mới thì workflow tạo release mới. Vẫn có thể tự vá bằng script nếu muốn
+(phần dưới).
+
 ## 1. Triệu chứng
 
 - Đăng nhập được nhưng đồng bộ tin nhắn cũ từ điện thoại không chạy / chạy xong thiếu

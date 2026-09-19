@@ -1,0 +1,104 @@
+name: Build AppImage đã vá
+
+# Tự tạo file AppImage đã vá (tải về là chạy, như .exe) mỗi khi:
+#  - bấm tay trong tab Actions (có thể chọn đúng phiên bản Zalo)
+#  - chạy tự động mỗi tuần (nếu Zalo ra bản mới thì tạo release mới)
+on:
+  workflow_dispatch:
+    inputs:
+      zalo_tag:
+        description: "Phiên bản Zalo (để trống = mới nhất), ví dụ 26.8.20"
+        required: false
+        default: ""
+      full:
+        description: "Dùng bản Full (có Wine cho zcall)? true/false"
+        required: false
+        default: "false"
+  schedule:
+    - cron: "0 3 * * 1"   # 03:00 UTC thứ Hai hằng tuần
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cài công cụ cần thiết
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3 curl squashfs-tools desktop-file-utils zsync file
+
+      - name: Tải AppImage Zalo (bản gốc, chưa vá)
+        id: fetch
+        run: |
+          ARGS=""
+          if [ -n "${{ inputs.zalo_tag }}" ]; then ARGS="$ARGS --tag ${{ inputs.zalo_tag }}"; fi
+          if [ "${{ inputs.full }}" = "true" ]; then ARGS="$ARGS --full"; fi
+          APPIMAGE="$(python3 tools/fetch_zalo.py --dest . $ARGS)"
+          echo "appimage=$APPIMAGE" >> "$GITHUB_OUTPUT"
+          echo "== Đã tải: $APPIMAGE"
+          du -h "$APPIMAGE"
+
+      - name: Vá lỗi đồng bộ (9 patch + fix JXL)
+        run: |
+          python3 patch_zalo_sync.py --appimage "${{ steps.fetch.outputs.appimage }}"
+
+      - name: Kiểm chứng (cú pháp JS + A/B test)
+        run: |
+          TREE="${{ steps.fetch.outputs.appimage }}.fixed/squashfs-root"
+          for f in "$TREE"/app/pc-dist/shared-worker.*.js "$TREE"/app/pc-dist/lazy/main-startup.*.js; do
+            node --check "$f" && echo "OK $f"
+          done
+          node test_sync_patch.js "$TREE/app"
+
+      - name: Đóng gói lại thành AppImage
+        id: pack
+        run: |
+          TREE="${{ steps.fetch.outputs.appimage }}.fixed/squashfs-root"
+          curl -fsSL -o appimagetool \
+            https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool
+          VER="$(basename "${{ steps.fetch.outputs.appimage }}" .AppImage)"
+          OUT="Zalo-${VER}-syncfix-x86_64.AppImage"
+          ARCH=x86_64 ./appimagetool --appimage-extract-and-run "$TREE" "$OUT"
+          chmod +x "$OUT"
+          echo "out=$OUT" >> "$GITHUB_OUTPUT"
+          ls -la "$OUT"
+          # kiểm tra bản đóng gói có đủ patch
+          mkdir -p verify && (cd verify && "../$OUT" --appimage-extract >/dev/null)
+          grep -q "Object.assign(a.attach,c0.data)" verify/squashfs-root/app/pc-dist/shared-worker.*.js \
+            && echo "OK: patch có trong file đóng gói" \
+            || { echo "LỖI: file đóng gói thiếu patch"; exit 1; }
+
+      - name: Tạo Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="zalo-${{ steps.fetch.outputs.appimage }}"
+          TAG="$(echo "$TAG" | sed 's|.*/||; s|\.AppImage||; s|+|_|g')"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG đã có — cập nhật file."
+            gh release upload "$TAG" "${{ steps.pack.outputs.out }}" --clobber
+          else
+            gh release create "$TAG" "${{ steps.pack.outputs.out }}" \
+              --title "Zalo Linux (đã vá đồng bộ) $TAG" \
+              --notes "AppImage **đã vá sẵn lỗi đồng bộ tin nhắn** — tải về là chạy, không cần chạy script.
+
+          ## Cách dùng
+          \`\`\`bash
+          sudo apt install -y libfuse2          # bắt buộc để chạy AppImage
+          chmod +x ./Zalo-*-syncfix-x86_64.AppImage
+          ./Zalo-*-syncfix-x86_64.AppImage --no-sandbox
+          \`\`\`
+          Hoặc chuột phải file → Properties → Permissions → tick \"Allow executing file\",
+          rồi double-click (giống mở file .exe trên Windows).
+
+          Muốn có icon trong menu ứng dụng: cài **GearLever** (Ubuntu/Mint/Zorin) rồi bấm Integrate,
+          hoặc dùng \`./install.sh\` để vá và cài vào menu.
+
+          Nội dung vá: xem README trong repo (9 patch JS thiếu từ PR #24 + fix module ảnh JXL).
+          Không liên kết với VNG/Zalo — dùng tài khoản phụ khi thử."
+          fi
