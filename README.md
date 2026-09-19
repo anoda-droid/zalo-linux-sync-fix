@@ -57,7 +57,37 @@ Trong bundle JS của Zalo (đã kiểm chứng bằng cách chạy thật):
 | MS1 | xoá hội thoại: chuẩn hoá `convId` nhóm + thử lại khi không tìm thấy |
 | FIX-JXL | tạo `jxl.node` từ `zjxl.node` |
 
-## 4. Cách dùng
+## 4. Cài nhanh trên Ubuntu / Linux Mint / Zorin OS
+
+```bash
+# 1. Cài sẵn mấy gói cần thiết (Ubuntu 22.04+/Mint 21+/Zorin 17+ không cài sẵn libfuse2)
+sudo apt update && sudo apt install -y git python3 libfuse2 xdg-utils
+
+# 2. Lấy script vá
+git clone https://github.com/anoda-droid/zalo-linux-sync-fix.git
+cd zalo-linux-sync-fix
+
+# 3. Tải AppImage Zalo for Linux (bản mới nhất) rồi vá + cài vào menu ứng dụng
+#    https://github.com/doandat943/zalo-for-linux/releases
+./install.sh --install-desktop ~/Downloads/Zalo-*.AppImage
+
+# 4. Chạy: mở "Zalo" trong menu, hoặc
+./run.sh
+```
+
+`install.sh` tự làm hết: kiểm tra python3/node/libfuse2 → bung AppImage → vá 9 patch
+→ kiểm tra cú pháp JS → chạy A/B test → (tuỳ chọn) copy vào `~/.local/opt/zalo-linux`
+và tạo `~/.local/share/applications/zalo.desktop`.
+
+Gỡ cài đặt:
+
+```bash
+rm -rf ~/.local/opt/zalo-linux ~/.local/share/applications/zalo.desktop
+```
+
+Fedora/Bazzite: thay bước 1 bằng `sudo dnf install -y git python3 fuse-libs xdg-utils`.
+
+## 4b. Cách dùng thủ công (không cần install.sh)
 
 ```bash
 # 1. Tải AppImage Zalo for Linux (bản mới nhất)
