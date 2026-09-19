@@ -28,16 +28,16 @@ class X:
         head = self._recv(8)
         ok, _, major, minor, length = struct.unpack("<BBHHH", head)
         if ok != 1:
-            raise SystemExit("X11 setup that bai")
+            raise SystemExit("X11 setup thất bại")
         self.data = self._recv(length * 4)
         vlen = struct.unpack_from("<H", self.data, 24)[0]
         off = 32 + ((vlen + 3) // 4) * 4
         self.root = struct.unpack_from("<I", self.data, off)[0]
         self.screens = struct.unpack_from("<B", self.data, 28)[0]
-        print("X11 %d.%d | so man hinh: %d | root=0x%08x" % (major, minor, self.screens, self.root))
-        # kich thuoc man hinh: trong screen, sau root(4) + colormap(4) + white(4) + black(4) + input(4)
+        print("X11 %d.%d | số màn hình: %d | root=0x%08x" % (major, minor, self.screens, self.root))
+        # kích thước màn hình: trong screen, sau root(4) + colormap(4) + white(4) + black(4) + input(4)
         self.win_w, self.win_h = struct.unpack_from("<HH", self.data, off + 20)
-        print("Do phan giai X: %dx%d" % (self.win_w, self.win_h))
+        print("Độ phân giải X: %dx%d" % (self.win_w, self.win_h))
 
     def _send(self, payload):
         self.seq += 1
@@ -95,21 +95,21 @@ if __name__ == "__main__":
     try:
         x = X()
     except Exception as e:
-        print("Khong ket noi duoc X0:", e)
+        print("Không kết nối được X0:", e)
         sys.exit(1)
-    state = {0: "an", 1: "khong xem duoc", 2: "DANG HIEN"}
+    state = {0: "ẩn", 1: "không xem được", 2: "ĐANG HIỆN"}
     found = False
     tops = x.query_tree()
-    print("So cua so goc:", len(tops))
+    print("Số cửa sổ gốc:", len(tops))
     print()
     for w in tops:
         for depth, wid, ms, (gx, gy, gw, gh), nm in walk(x, w):
             if ms == 2 and nm:
                 found = True
-                print("  %s0x%08x  vi tri (%d,%d) kich thuoc %dx%d  [%s]  '%s'"
+                print("  %s0x%08x  vị trí (%d,%d) kích thước %dx%d  [%s]  '%s'"
                       % ("  " * depth, wid, gx, gy, gw, gh, state[ms], nm))
     if not found:
-        print("  -> KHONG co cua so nao dang hien thi (co ten)")
-    # canh bao cua so nam ngoai man hinh
+        print("  -> KHÔNG có cửa sổ nào đang hiển thị (có tên)")
+    # cảnh báo cửa sổ nằm ngoài màn hình
     print()
-    print("Man hinh ao: %dx%d" % (x.win_w, x.win_h))
+    print("Màn hình ảo: %dx%d" % (x.win_w, x.win_h))
