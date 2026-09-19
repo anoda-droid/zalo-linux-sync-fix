@@ -1,0 +1,17 @@
+# bản bung AppImage / file tạm khi test
+squashfs-root/
+*.AppImage
+*.AppImage.fixed/
+*.orig
+*.log
+
+# python
+__pycache__/
+*.pyc
+
+# node
+node_modules/
+
+# windows
+Thumbs.db
+desktop.ini
