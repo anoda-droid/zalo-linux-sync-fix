@@ -12,20 +12,28 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEST="$HOME/.local/opt/zalo-linux"
 DESKTOP_ENTRY=0
+FULL=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --install-desktop) DESKTOP_ENTRY=1; shift ;;
+    --full) FULL=1; shift ;;
     --dest) DEST="$2"; shift 2 ;;
-    -h|--help) sed -n '2,12p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,14p' "$0"; exit 0 ;;
     *) break ;;
   esac
 done
 
 APPIMAGE="${1:-}"
 if [ -z "$APPIMAGE" ]; then
-  echo "Dùng: $0 [--install-desktop] [--dest <thư mục>] /duong/dan/Zalo-*.AppImage"
-  exit 1
+  echo "== Không truyền đường dẫn AppImage — tự tải bản mới nhất từ GitHub"
+  APPIMAGE="$(python3 "$HERE/tools/fetch_zalo.py" --dest "${XDG_DOWNLOAD_DIR:-$HOME/Downloads}" $([ "$FULL" = 1 ] && echo --full))" || {
+    echo "!! Tự tải không được. Anh/chị tải tay AppImage từ:"
+    echo "   https://github.com/doandat943/zalo-for-linux/releases"
+    echo "   rồi chạy lại:  $0 <đường-dẫn-AppImage>"
+    exit 1
+  }
+  echo "   -> $APPIMAGE"
 fi
 [ -f "$APPIMAGE" ] || { echo "!! Không thấy file: $APPIMAGE"; exit 1; }
 APPIMAGE="$(cd "$(dirname "$APPIMAGE")" && pwd)/$(basename "$APPIMAGE")"

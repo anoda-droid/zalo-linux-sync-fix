@@ -67,17 +67,24 @@ sudo apt update && sudo apt install -y git python3 libfuse2 xdg-utils
 git clone https://github.com/anoda-droid/zalo-linux-sync-fix.git
 cd zalo-linux-sync-fix
 
-# 3. Tải AppImage Zalo for Linux (bản mới nhất) rồi vá + cài vào menu ứng dụng
-#    https://github.com/doandat943/zalo-for-linux/releases
-./install.sh --install-desktop ~/Downloads/Zalo-*.AppImage
+# 3. Vá + cài vào menu ứng dụng. Không truyền gì thì script TỰ TẢI AppImage
+#    Zalo mới nhất từ GitHub release của doandat943 (~263MB) rồi vá luôn.
+./install.sh --install-desktop
 
 # 4. Chạy: mở "Zalo" trong menu, hoặc
 ./run.sh
 ```
 
-`install.sh` tự làm hết: kiểm tra python3/node/libfuse2 → bung AppImage → vá 9 patch
-→ kiểm tra cú pháp JS → chạy A/B test → (tuỳ chọn) copy vào `~/.local/opt/zalo-linux`
-và tạo `~/.local/share/applications/zalo.desktop`.
+Muốn dùng file AppImage anh/chị đã tải sẵn (hoặc bản Full có Wine để gọi điện):
+
+```bash
+./install.sh --install-desktop ~/Downloads/Zalo-26.8.20-ecfb96a.AppImage
+./install.sh --install-desktop --full          # bản Full (~464MB, có zcall qua Wine)
+```
+
+`install.sh` tự làm hết: kiểm tra python3/node/libfuse2 → tự tải AppImage (nếu chưa có)
+→ bung → vá 9 patch → kiểm tra cú pháp JS → chạy A/B test → copy vào
+`~/.local/opt/zalo-linux` và tạo `~/.local/share/applications/zalo.desktop`.
 
 Gỡ cài đặt:
 
@@ -86,6 +93,12 @@ rm -rf ~/.local/opt/zalo-linux ~/.local/share/applications/zalo.desktop
 ```
 
 Fedora/Bazzite: thay bước 1 bằng `sudo dnf install -y git python3 fuse-libs xdg-utils`.
+
+> **Vì sao repo không để sẵn file AppImage?** Vì bên trong AppImage là mã của
+> Zalo/VNG. Đưa bản đã đóng gói lên repo là phân phối lại phần mềm của họ (dễ bị
+> gỡ, và không cần thiết). Repo chỉ chứa **script**; `install.sh` tự tải bản
+> chính thức rồi vá **ngay trên máy bạn** — kết quả y như nhau, mà không phân
+> phối lại gì của Zalo.
 
 ## 4b. Cách dùng thủ công (không cần install.sh)
 
