@@ -46,10 +46,18 @@ for c in "$TREE/AppRun" "$TREE/zalo"; do [ -x "$c" ] && { RUN="$c"; break; }; do
 ARGS=(--no-sandbox "$@")
 
 # Trong thư mục đã bung thì KHÔNG cần FUSE (chỉ file .AppImage mới cần).
-# WSLg / máy ảo hay lỗi GPU -> bật bằng biến môi trường.
+# WSLg / máy ảo hay lỗi GPU -> ZALO_DISABLE_GPU=1
 if [ "${ZALO_DISABLE_GPU:-0}" = "1" ]; then
   echo "[i] ZALO_DISABLE_GPU=1 — tắt tăng tốc GPU"
   ARGS+=(--disable-gpu --disable-gpu-compositing --disable-software-rasterizer)
 fi
+
+# Máy dùng Wayland (Zorin 17, Ubuntu 24.04...) mà cửa sổ/khay hệ thống lỗi:
+#   ZALO_OZONE=x11      -> ép chạy qua XWayland (mặc định của Electron)
+#   ZALO_OZONE=wayland  -> ép chạy Wayland gốc
+case "${ZALO_OZONE:-}" in
+  x11)     echo "[i] Ép nền tảng X11";     ARGS+=(--ozone-platform=x11) ;;
+  wayland) echo "[i] Ép nền tảng Wayland"; ARGS+=(--ozone-platform=wayland) ;;
+esac
 
 exec "$RUN" "${ARGS[@]}"

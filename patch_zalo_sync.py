@@ -239,6 +239,74 @@ def apply_to_file(fpath, patches, dry):
     return report
 
 
+def squashfs_offset(path):
+    """Tìm offset của hệ thống file squashfs bên trong AppImage (magic 'hsqs')."""
+    with open(path, "rb") as f:
+        pos = 0
+        while True:
+            chunk = f.read(1 << 20)
+            if not chunk:
+                return None
+            i = chunk.find(b"hsqs")
+            if i >= 0:
+                return pos + i
+            pos += len(chunk)
+
+
+def extract_appimage(appimage, outdir, dry=False):
+    """Bung AppImage. Cách 1: runtime có sẵn (--appimage-extract, KHÔNG cần FUSE).
+    Cách 2: 7z. Cách 3: unsquashfs (tự dò offset)."""
+    os.makedirs(outdir, exist_ok=True)
+    root = os.path.join(outdir, "squashfs-root")
+    if dry:
+        return root
+
+    def ok():
+        return os.path.isdir(root) and os.path.isdir(os.path.join(root, "app"))
+
+    # 1) runtime chuẩn của AppImage
+    if os.path.exists(root):
+        shutil.rmtree(root)          # bung lại từ đầu, tránh lẫn bản đã vá lần trước
+    try:
+        subprocess.run([appimage, "--appimage-extract"], cwd=outdir, check=True,
+                       stdout=subprocess.DEVNULL)
+    except Exception as e:
+        print("   [!] Bung bằng AppImage runtime không được (%s)" % str(e).split("\n")[0])
+        print("       Thử cách khác...")
+    if ok():
+        return root
+
+    # 2) 7z / 7za / 7zz
+    for tool in ("7z", "7za", "7zz"):
+        if shutil.which(tool):
+            try:
+                subprocess.run([tool, "x", appimage, "-o" + outdir, "-y"], check=True,
+                               stdout=subprocess.DEVNULL)
+            except Exception:
+                continue
+            if ok():
+                return root
+
+    # 3) unsquashfs (cần dò offset đầu của squashfs)
+    if shutil.which("unsquashfs"):
+        off = squashfs_offset(appimage)
+        if off:
+            try:
+                subprocess.run(["unsquashfs", "-o", str(off), "-f", "-d", root, appimage],
+                               check=True, stdout=subprocess.DEVNULL)
+            except Exception:
+                pass
+            if ok():
+                return root
+
+    print("!! Không bung được AppImage. Cách khắc phục:")
+    print("   - Cài công cụ bung:  sudo apt install p7zip-full squashfs-tools")
+    print("   - Hoặc bung tay rồi trỏ script vào thư mục:")
+    print("       %s --appimage-extract            # tạo ./squashfs-root" % appimage)
+    print("       python3 patch_zalo_sync.py ./squashfs-root")
+    return root
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("target", nargs="?", help="thư mục app/ (hoặc thư mục chứa app/)")
@@ -249,13 +317,15 @@ def main():
     outdir = None
     if a.appimage:
         appimage = os.path.abspath(a.appimage)
+        if not os.path.isfile(appimage):
+            print("!! Không thấy file AppImage:", appimage)
+            return 2
         outdir = appimage + ".fixed"
         print("== Bung AppImage:", appimage)
-        if os.path.exists(outdir) and not a.check:
-            shutil.rmtree(outdir)
-        os.makedirs(outdir, exist_ok=True)
-        subprocess.check_call([appimage, "--appimage-extract"], cwd=outdir)
-        target = os.path.join(outdir, "squashfs-root")
+        print("   ->", outdir)
+        target = extract_appimage(appimage, outdir, a.check)
+        if not a.check and not os.path.isdir(os.path.join(target, "app")):
+            return 2
     else:
         target = a.target or "."
 
@@ -271,16 +341,30 @@ def main():
         print("!! Không thấy pc-dist/shared-worker.*.js")
         return 2
 
+    missing = []
+
+    def show(rep):
+        for pid, desc, st, n in rep:
+            print("   [%-24s] %-60s %s" % (pid, desc, st))
+            if "KHÔNG KHỚP" in st:
+                missing.append(pid)
+
     print("\n---- SHARED-WORKER:", os.path.basename(sw[0]))
-    for pid, desc, st, n in apply_to_file(sw[0], PATCHES_SW, a.check):
-        print("   [%-24s] %-60s %s" % (pid, desc, st))
+    show(apply_to_file(sw[0], PATCHES_SW, a.check))
 
     if ms:
         print("\n---- MAIN-STARTUP:", os.path.basename(ms[0]))
-        for pid, desc, st, n in apply_to_file(ms[0], PATCHES_MS, a.check):
-            print("   [%-24s] %-60s %s" % (pid, desc, st))
+        show(apply_to_file(ms[0], PATCHES_MS, a.check))
     else:
         print("\n!! Không thấy pc-dist/lazy/main-startup.*.js (bỏ qua patch xoá hội thoại)")
+
+    if missing:
+        print("\n!! %d patch KHÔNG khớp: %s" % (len(missing), ", ".join(missing)))
+        print("   Nghĩa là bản Zalo này đã đổi code so với bản script được viết cho (26.8.20).")
+        print("   - Không có gì bị phá: các file .orig vẫn giữ bản gốc.")
+        print("   - Báo lỗi kèm phiên bản Zalo tại: https://github.com/anoda-droid/zalo-linux-sync-fix/issues")
+        if not a.check:
+            return 3
 
     print("\n---- FIX khác")
     print("   [%-24s] %-60s %s" % ("FIX-JXL", "Sửa tên file module ảnh JPEG-XL", fix_jxl(root, a.check)))

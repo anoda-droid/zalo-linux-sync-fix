@@ -1,112 +1,167 @@
 #!/usr/bin/env bash
 # install.sh — vá lỗi đồng bộ tin nhắn cho AppImage Zalo for Linux
-# Hỗ trợ: Ubuntu / Linux Mint / Zorin OS / Debian / Fedora (và WSL)
+#
+# Máy hỗ trợ: Ubuntu / Linux Mint / Zorin OS / Debian / Pop!_OS (apt)
+#             Fedora / Bazzite / Nobara (dnf) — và WSL
 #
 # Dùng:
-#   ./install.sh /duong/dan/Zalo-*.AppImage                 # vá, chạy từ thư mục hiện tại
-#   ./install.sh --install-desktop /duong/dan/Zalo-*.AppImage
-#        -> cài vào ~/.local/opt/zalo-linux + tạo mục trong menu ứng dụng
+#   ./install.sh                              # tự tải AppImage mới nhất + vá + cài vào menu
+#   ./install.sh --full                       # lấy bản Full (~464MB, có Wine cho zcall)
+#   ./install.sh /duong/dan/Zalo-*.AppImage   # vá file AppImage có sẵn
+#   ./install.sh --no-desktop /duong/dan/...  # chỉ vá, không cài vào ~/.local/opt
 #
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEST="$HOME/.local/opt/zalo-linux"
-DESKTOP_ENTRY=0
+DESKTOP_ENTRY=1
 FULL=0
+NEED_MB=2600          # chỗ trống cần cho: bung (~700MB) + bản cài (~700MB) + dư an toàn
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --install-desktop) DESKTOP_ENTRY=1; shift ;;
-    --full) FULL=1; shift ;;
-    --dest) DEST="$2"; shift 2 ;;
-    -h|--help) sed -n '2,14p' "$0"; exit 0 ;;
+    --no-desktop)      DESKTOP_ENTRY=0; shift ;;
+    --full)            FULL=1; shift ;;
+    --dest)            DEST="$2"; shift 2 ;;
+    -h|--help)         sed -n '2,14p' "$0"; exit 0 ;;
     *) break ;;
   esac
 done
 
-APPIMAGE="${1:-}"
-if [ -z "$APPIMAGE" ]; then
-  echo "== Không truyền đường dẫn AppImage — tự tải bản mới nhất từ GitHub"
-  APPIMAGE="$(python3 "$HERE/tools/fetch_zalo.py" --dest "${XDG_DOWNLOAD_DIR:-$HOME/Downloads}" $([ "$FULL" = 1 ] && echo --full))" || {
-    echo "!! Tự tải không được. Anh/chị tải tay AppImage từ:"
-    echo "   https://github.com/doandat943/zalo-for-linux/releases"
-    echo "   rồi chạy lại:  $0 <đường-dẫn-AppImage>"
-    exit 1
-  }
-  echo "   -> $APPIMAGE"
+say()  { printf '%s\n' "$*"; }
+ok()   { printf '   OK  %s\n' "$*"; }
+warn() { printf '   [!] %s\n' "$*"; }
+die()  { printf '!! %s\n' "$*" >&2; exit 1; }
+
+# ---------- 0. Nhận diện hệ điều hành ----------
+PKG=""
+if command -v apt-get >/dev/null 2>&1; then PKG="apt"
+elif command -v dnf >/dev/null 2>&1; then PKG="dnf"
+elif command -v pacman >/dev/null 2>&1; then PKG="pacman"
 fi
-[ -f "$APPIMAGE" ] || { echo "!! Không thấy file: $APPIMAGE"; exit 1; }
-APPIMAGE="$(cd "$(dirname "$APPIMAGE")" && pwd)/$(basename "$APPIMAGE")"
-chmod +x "$APPIMAGE" 2>/dev/null || true
+apt_hint() {
+  case "$PKG" in
+    apt) echo "sudo apt install -y $*" ;;
+    dnf) echo "sudo dnf install -y $*" ;;
+    pacman) echo "sudo pacman -S --needed $*" ;;
+    *) echo "(cài thêm: $*)" ;;
+  esac
+}
+OSNAME="$( (. /etc/os-release 2>/dev/null && echo "$PRETTY_NAME") || uname -s )"
+say "== Hệ thống: $OSNAME   [gói: ${PKG:-không rõ}]"
+say ""
 
 # ---------- 1. Kiểm tra môi trường ----------
-echo "== Kiểm tra môi trường"
-MISSING=()
-command -v python3 >/dev/null 2>&1 || MISSING+=("python3")
-if command -v python3 >/dev/null 2>&1; then
-  PYV="$(python3 -c 'import sys;print("%d.%d"%sys.version_info[:2])')"
-  echo "   python3 $PYV"
-  python3 -c 'import sys;sys.exit(0 if sys.version_info>=(3,6) else 1)' || { echo "!! Cần python3 >= 3.6"; exit 1; }
-fi
-command -v node >/dev/null 2>&1 && echo "   node $(node -v)  (dùng để kiểm tra cú pháp)" || echo "   (không có node — bỏ qua kiểm tra cú pháp, vẫn vá bình thường)"
+say "== Kiểm tra môi trường"
+command -v python3 >/dev/null 2>&1 || die "Thiếu python3.  ->  $(apt_hint python3)"
+python3 -c 'import sys;sys.exit(0 if sys.version_info>=(3,6) else 1)' \
+  || die "Cần python3 >= 3.6 (đang có $(python3 -V 2>&1))"
+ok "python3 $(python3 -c 'import sys;print("%d.%d"%sys.version_info[:2])')"
 
-# libfuse2: cần để CHẠY AppImage (Ubuntu 22.04+/Mint 21+/Zorin 17 trở lên không cài sẵn)
+if command -v node >/dev/null 2>&1; then
+  ok "node $(node -v) (kiểm tra cú pháp JS)"
+else
+  warn "Không có node — bỏ qua kiểm tra cú pháp (vẫn vá bình thường). Muốn có: $(apt_hint nodejs)"
+fi
+command -v curl >/dev/null 2>&1 && ok "curl" || warn "Không có curl (chỉ cần khi tải bằng tay)"
+
 HAVE_FUSE=0
-if ldconfig -p 2>/dev/null | grep -q "libfuse\.so\.2"; then HAVE_FUSE=1; fi
+ldconfig -p 2>/dev/null | grep -q "libfuse\.so\.2" && HAVE_FUSE=1
 if [ "$HAVE_FUSE" = 0 ]; then
-  echo "   [!] Chưa có libfuse2 — cần để chạy AppImage dạng file."
-  echo "       Cài:  sudo apt install libfuse2        (Ubuntu/Mint/Zorin)"
-  echo "            sudo dnf install fuse-libs        (Fedora)"
-  echo "       (Script vá vẫn chạy được — chỉ lúc CHẠY mới cần; run.sh có chế độ dự phòng.)"
+  warn "Chưa có libfuse2 — BẮT BUỘC để chạy AppImage dạng file:"
+  say  "        $(apt_hint libfuse2)          # Fedora: fuse-libs"
+  say  "        (Script vá vẫn chạy; run.sh có chế độ dự phòng khi thiếu FUSE.)"
 fi
-command -v xdg-settings >/dev/null 2>&1 || echo "   [i] Thiếu xdg-utils (chỉ ảnh hưởng mở link bằng trình duyệt mặc định): sudo apt install xdg-utils"
-
-if [ ${#MISSING[@]} -gt 0 ]; then
-  echo "!! Thiếu: ${MISSING[*]}  ->  sudo apt install ${MISSING[*]}"
-  exit 1
+command -v xdg-settings >/dev/null 2>&1 \
+  || warn "Thiếu xdg-utils (chỉ ảnh hưởng mở link bằng trình duyệt mặc định): $(apt_hint xdg-utils)"
+if ! command -v 7z >/dev/null 2>&1 && ! command -v unsquashfs >/dev/null 2>&1; then
+  warn "Không có 7z/unsquashfs (chỉ cần nếu cách bung chuẩn gặp lỗi): $(apt_hint p7zip-full squashfs-tools)"
 fi
 
-# ---------- 2. Vá ----------
-echo
-echo "== Vá lỗi đồng bộ"
-OUTDIR="${APPIMAGE}.fixed"
+AVAIL_MB="$(df -Pk "${TMPDIR:-/tmp}" 2>/dev/null | awk 'NR==2{print int($4/1024)}')"
+if [ -n "${AVAIL_MB:-}" ]; then
+  [ "$AVAIL_MB" -ge "$NEED_MB" ] || die "Còn ít chỗ trống (${AVAIL_MB}MB) — cần khoảng ${NEED_MB}MB. Dọn bớt rồi chạy lại."
+  ok "chỗ trống: ${AVAIL_MB}MB (cần ~${NEED_MB}MB)"
+fi
+
+# ---------- 2. Lấy AppImage ----------
+APPIMAGE="${1:-}"
+if [ -z "$APPIMAGE" ]; then
+  say ""
+  say "== Chưa có AppImage — tự tải bản mới nhất từ GitHub"
+  EXTRA=""
+  [ "$FULL" = 1 ] && EXTRA="--full"
+  # shellcheck disable=SC2086
+  APPIMAGE="$(python3 "$HERE/tools/fetch_zalo.py" --dest "${XDG_DOWNLOAD_DIR:-$HOME/Downloads}" $EXTRA)" || {
+    say "   Tải tự động không được (mạng?). Tải tay rồi chạy lại:"
+    say "   https://github.com/doandat943/zalo-for-linux/releases"
+    say "   $0 <đường-dẫn-AppImage>"
+    exit 1
+  }
+  say "   -> $APPIMAGE"
+fi
+[ -f "$APPIMAGE" ] || die "Không thấy file: $APPIMAGE"
+APPIMAGE="$(cd "$(dirname "$APPIMAGE")" && pwd)/$(basename "$APPIMAGE")"
+SIZE_MB=$(( $(stat -c %s "$APPIMAGE" 2>/dev/null || echo 0) / 1048576 ))
+[ "$SIZE_MB" -gt 100 ] || die "File AppImage nhỏ bất thường (${SIZE_MB}MB) — tải lại giúp."
+ok "AppImage: $(basename "$APPIMAGE") (${SIZE_MB}MB)"
+chmod +x "$APPIMAGE" 2>/dev/null || true
+
+# ---------- 3. Vá ----------
+say ""
+say "== Vá lỗi đồng bộ"
+set +e
 python3 "$HERE/patch_zalo_sync.py" --appimage "$APPIMAGE"
-ROOT="$OUTDIR/squashfs-root"
-[ -d "$ROOT" ] || { echo "!! Không thấy $ROOT sau khi vá"; exit 1; }
+RC=$?
+set -e
+case "$RC" in
+  0) ;;
+  3) die "Bản Zalo này đã đổi code so với bản script được viết cho (26.8.20) — xem các patch 'KHÔNG KHỚP' ở trên.
+   Không có gì bị phá (bản gốc còn ở các file .orig). Báo giúp tại:
+   https://github.com/anoda-droid/zalo-linux-sync-fix/issues" ;;
+  *) die "Vá thất bại (mã lỗi $RC). Xem thông báo phía trên." ;;
+esac
+ROOT="${APPIMAGE}.fixed/squashfs-root"
+[ -d "$ROOT/app" ] || die "Không thấy $ROOT/app sau khi vá"
 
-# ---------- 3. Kiểm chứng ----------
-echo
-echo "== Kiểm chứng kết quả"
+# ---------- 4. Kiểm chứng ----------
+say ""
+say "== Kiểm chứng kết quả"
 FAIL=0
-python3 "$HERE/patch_zalo_sync.py" --check "$ROOT" | grep -q "BỎ QUA (đã vá trước đó)" \
-  && echo "   OK  các patch đã nằm trong bundle" \
-  || { echo "   LI patch chưa được áp đầy đủ (chạy lại xem chi tiết)"; FAIL=1; }
+PATCHED="$(python3 "$HERE/patch_zalo_sync.py" --check "$ROOT" 2>/dev/null | grep -c "BỎ QUA (đã vá trước đó)" || true)"
+if [ "${PATCHED:-0}" -ge 9 ]; then
+  ok "9/9 patch đã nằm trong bundle"
+else
+  warn "chỉ thấy ${PATCHED}/9 patch — xem lại danh sách phía trên"
+  FAIL=1
+fi
 
 if command -v node >/dev/null 2>&1; then
   for f in "$ROOT"/app/pc-dist/shared-worker.*.js "$ROOT"/app/pc-dist/lazy/main-startup.*.js; do
     [ -e "$f" ] || continue
     if node --check "$f" >/dev/null 2>&1; then
-      echo "   OK  cú pháp $(basename "$f")"
+      ok "cú pháp $(basename "$f")"
     else
-      echo "   LI cú pháp $(basename "$f") — khôi phục bản gốc:"
-      echo "       cp '${f}.orig' '${f}'"
+      warn "cú pháp $(basename "$f") — khôi phục bản gốc: cp '${f}.orig' '${f}'"
       FAIL=1
     fi
   done
-  [ -f "$HERE/test_sync_patch.js" ] && { echo; node "$HERE/test_sync_patch.js" "$ROOT/app" || true; }
+  if [ -f "$HERE/test_sync_patch.js" ]; then
+    say ""
+    node "$HERE/test_sync_patch.js" "$ROOT/app" || true
+  fi
+else
+  warn "không có node nên bỏ qua kiểm tra cú pháp"
 fi
 
-if [ "$FAIL" = 1 ]; then
-  echo
-  echo "!! Có bước kiểm tra không đạt. Bản gốc vẫn còn ở các file .orig"
-  exit 1
-fi
+[ "$FAIL" = 1 ] && die "Có bước kiểm tra không đạt. Bản gốc vẫn ở các file .orig — không mất gì."
 
-# ---------- 4. Cài vào menu (tuỳ chọn) ----------
+# ---------- 5. Cài vào menu ứng dụng ----------
 RUN_PATH="$ROOT/AppRun"
 if [ "$DESKTOP_ENTRY" = 1 ]; then
-  echo
-  echo "== Cài vào $DEST"
+  say ""
+  say "== Cài vào $DEST"
   mkdir -p "$(dirname "$DEST")"
   rm -rf "$DEST"
   cp -a "$ROOT" "$DEST"
@@ -115,7 +170,10 @@ if [ "$DESKTOP_ENTRY" = 1 ]; then
   APPDIR="$HOME/.local/share/applications"
   mkdir -p "$APPDIR"
   ICON="$DEST/.DirIcon"
-  [ -f "$ICON" ] || ICON="$(find "$DEST/usr/share/icons" -name 'zalo.png' -o -name '*zalo*.png' 2>/dev/null | head -1)"
+  if [ ! -f "$ICON" ]; then
+    ICON="$(find "$DEST/usr/share/icons" -name 'zalo.png' 2>/dev/null | head -1)"
+  fi
+  [ -n "$ICON" ] && [ -f "$ICON" ] || ICON="application-x-executable"
   cat > "$APPDIR/zalo.desktop" <<EOF
 [Desktop Entry]
 Type=Application
@@ -127,14 +185,23 @@ Terminal=false
 Categories=Network;InstantMessaging;
 StartupWMClass=Zalo
 EOF
+  chmod +x "$APPDIR/zalo.desktop"
   update-desktop-database "$APPDIR" >/dev/null 2>&1 || true
+  ok "đã tạo $APPDIR/zalo.desktop (Zalo hiện trong menu ứng dụng)"
+  ok "gỡ cài đặt: rm -rf '$DEST' '$APPDIR/zalo.desktop'"
   RUN_PATH="$DEST/AppRun"
-  echo "   OK  đã tạo $APPDIR/zalo.desktop (Zalo sẽ hiện trong menu ứng dụng)"
-  echo "   Gỡ cài đặt: rm -rf '$DEST' '$APPDIR/zalo.desktop'"
 fi
 
-echo
-echo "== Xong. Chạy:"
-echo "   $RUN_PATH --no-sandbox"
-[ "$HAVE_FUSE" = 0 ] && echo "   (thiếu libfuse2 thì dùng: ./run.sh  — script tự chọn chế độ dự phòng)"
-[ -f "$HERE/run.sh" ] && echo "   hoặc:  $HERE/run.sh '$ROOT'"
+say ""
+say "== XONG. Chạy Zalo:"
+say "   mở 'Zalo' trong menu ứng dụng"
+say "   hoặc:  $RUN_PATH --no-sandbox"
+[ -f "$HERE/run.sh" ] && say "   hoặc:  $HERE/run.sh"
+if [ "$HAVE_FUSE" = 0 ]; then
+  say ""
+  warn "Nhớ cài libfuse2 TRƯỚC khi chạy: $(apt_hint libfuse2)"
+fi
+say ""
+say "== Đăng nhập xong, đồng bộ tin nhắn cũ sẽ chạy. Dấu hiệu vá hoạt động:"
+say "   ~/.config/ZaloData/Database/_production/*/Sync.db — bảng missing_message_range giảm dần"
+say "   Log chẩn đoán: chạy kèm --enable-logging=stderr rồi tìm dòng [SYNC]"

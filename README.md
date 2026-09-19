@@ -100,7 +100,20 @@ Fedora/Bazzite: thay bước 1 bằng `sudo dnf install -y git python3 fuse-libs
 > chính thức rồi vá **ngay trên máy bạn** — kết quả y như nhau, mà không phân
 > phối lại gì của Zalo.
 
-## 4b. Cách dùng thủ công (không cần install.sh)
+## 4c. Yêu cầu & dung lượng
+
+| Mục | Cần gì |
+|---|---|
+| Kiến trúc | x86_64 (bản port này **chưa** hỗ trợ ARM/aarch64 — xem issue #70 của repo gốc) |
+| Hệ điều hành | Ubuntu 22.04+, Linux Mint 21+, Zorin OS 17+, Debian 12+, Pop!_OS, Fedora — và WSL |
+| python3 | >= 3.6 (mặc định có sẵn trên các distro trên) |
+| libfuse2 / fuse-libs | **bắt buộc** để chạy AppImage (Ubuntu 22.04+/Mint 21+/Zorin 17+ không cài sẵn) |
+| node | tuỳ chọn — chỉ để kiểm tra cú pháp sau khi vá |
+| 7z hoặc squashfs-tools | tuỳ chọn — chỉ dùng khi cách bung chuẩn gặp lỗi |
+| Dung lượng trống | ~2.6GB (AppImage ~264MB + bản bung ~700MB + bản cài ~700MB) |
+| Mạng | cần khi để script tự tải AppImage (~264MB) |
+
+## 4d. Cách dùng thủ công (không cần install.sh)
 
 ```bash
 # 1. Tải AppImage Zalo for Linux (bản mới nhất)
@@ -159,6 +172,44 @@ Log chẩn đoán sau khi vá (chạy kèm `--enable-logging=stderr`, tìm `[SYN
 ```
 [SYNC] decrypt format=1 convCount=... in=/...
 [SYNC] insertToDb ok=1234 fail=0
+```
+
+## 5b. Xử lý sự cố (máy mới cài lần đầu)
+
+| Triệu chứng | Nguyên nhân | Cách sửa |
+|---|---|---|
+| `AppImages require FUSE to run` / AppImage không mở | thiếu libfuse2 | `sudo apt install libfuse2` (Fedora: `fuse-libs`). Hoặc chạy `./run.sh /duong/dan/Zalo-*.AppImage` — tự dùng chế độ extract-and-run |
+| `The SUID sandbox helper binary was found, but is not configured correctly` | chrome-sandbox không có setuid root | chạy kèm `--no-sandbox` (file `.desktop` do `install.sh` tạo đã có sẵn) |
+| `GPU process isn't usable. Goodbye.` (máy ảo / WSLg) | tăng tốc GPU không khả dụng | `ZALO_DISABLE_GPU=1 ./run.sh` |
+| Cửa sổ không hiện nhưng tiến trình vẫn chạy | lệch màn hình / WSLg | kiểm tra bằng `python3 tools/xwin.py`; thử `ZALO_OZONE=x11 ./run.sh` |
+| Vá báo `KHÔNG KHỚP` | Zalo ra bản mới, code đã đổi | không sao — bản gốc còn ở `*.orig`. Báo issue kèm phiên bản Zalo |
+| Vá báo không bung được AppImage | thiếu công cụ bung | `sudo apt install p7zip-full squashfs-tools`, hoặc bung tay: `<AppImage> --appimage-extract` rồi `python3 patch_zalo_sync.py ./squashfs-root` |
+| Dán ảnh từ clipboard không được | thiếu công cụ clipboard | `sudo apt install wl-clipboard xclip` |
+| Gọi điện báo `no usable wine` | bản thường không kèm Wine | cài lại bằng `./install.sh --full` |
+| Không mở được vì đã có phiên khác | Zalo chỉ cho 1 phiên | đóng phiên đang chạy trước |
+| Đồng bộ bị dừng giữa đường, WSL tự tắt | ổ đĩa chứa WSL hết chỗ | giải phóng ổ, hoặc chuyển distro sang ổ khác: `wsl --shutdown` rồi `wsl --manage Ubuntu --move F:\WSL\Ubuntu` |
+| Cài xong không thấy Zalo trong menu | cache menu | `update-desktop-database ~/.local/share/applications` rồi đăng nhập lại; kiểm tra file `~/.local/share/applications/zalo.desktop` |
+| Vẫn thiếu tin nhắn cũ sau khi đồng bộ xong | giới hạn của bản port (cấu trúc DB khác bản Windows) | dùng đường xuất/nhập `.zip` ở mục 6 |
+
+Đăng nhập được nhưng danh sách hội thoại còn trống: bình thường — đồng bộ chạy **dần
+theo từng đợt** (incremental). Theo dõi tiến độ:
+
+```bash
+python3 - <<'EOF'
+import sqlite3, glob
+for p in glob.glob("~/.config/ZaloData/Database/_production/*/Sync.db".replace("~", __import__("os").path.expanduser("~"))):
+    c = sqlite3.connect("file:" + p + "?mode=ro", uri=True)
+    print(p.split("/")[-2], c.execute("select status,count(*) from missing_message_range group by status").fetchall())
+    c.close()
+EOF
+```
+
+Muốn xem log chẩn đoán của bản vá:
+
+```bash
+ZALO_DISABLE_GPU=1 ./run.sh --enable-logging=stderr 2>&1 | grep "\[SYNC\]"
+# [SYNC] decrypt format=1 convCount=...
+# [SYNC] insertToDb ok=1234 fail=0
 ```
 
 ## 6. Đường bảo đảm cho tin nhắn cũ (khuyến nghị của maintainer)
