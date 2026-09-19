@@ -21,8 +21,9 @@ if [ -n "$TARGET" ] && [ -f "$TARGET" ]; then
   if have_fuse; then
     exec "$TARGET" --no-sandbox "$@"
   fi
-  echo "[i] Không thấy libfuse2 — chạy AppImage ở chế độ extract-and-run (không cần FUSE)"
-  echo "    Cài đầy đủ: sudo apt install libfuse2   (Ubuntu/Mint/Zorin)"
+  echo "[i] Không thấy FUSE v2 — chạy AppImage ở chế độ extract-and-run (không cần FUSE)"
+  echo "    Cài đầy đủ: sudo apt install libfuse2t64   (Ubuntu 24.04+/Zorin 18/Mint 22)"
+  echo "                sudo apt install libfuse2      (Ubuntu 22.04/Zorin 17/Mint 21)"
   exec "$TARGET" --appimage-extract-and-run --no-sandbox "$@"
 fi
 

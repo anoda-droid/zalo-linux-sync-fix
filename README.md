@@ -14,7 +14,8 @@ Vào **[Releases](https://github.com/anoda-droid/zalo-linux-sync-fix/releases)**
 tải file `Zalo-<phiên bản>-syncfix-x86_64.AppImage` (~243MB, **đã vá sẵn**):
 
 ```bash
-sudo apt install -y libfuse2          # bắt buộc (Ubuntu 22.04+/Mint 21+/Zorin 17+)
+# Ubuntu 24.04+ / Zorin 18 / Mint 22 dùng libfuse2t64; Ubuntu 22.04 / Zorin 17 / Mint 21 dùng libfuse2
+sudo apt install -y libfuse2t64        # (máy cũ hơn: sudo apt install -y libfuse2)
 chmod +x Zalo-*-syncfix-x86_64.AppImage
 ./Zalo-*-syncfix-x86_64.AppImage --no-sandbox
 ```
@@ -84,8 +85,9 @@ Trong bundle JS của Zalo (đã kiểm chứng bằng cách chạy thật):
 ## 4. Cài nhanh trên Ubuntu / Linux Mint / Zorin OS
 
 ```bash
-# 1. Cài sẵn mấy gói cần thiết (Ubuntu 22.04+/Mint 21+/Zorin 17+ không cài sẵn libfuse2)
-sudo apt update && sudo apt install -y git python3 libfuse2 xdg-utils
+# 1. Cài sẵn mấy gói cần thiết
+#    Ubuntu 24.04+/Zorin 18/Mint 22: libfuse2t64   |   Ubuntu 22.04/Zorin 17/Mint 21: libfuse2
+sudo apt update && sudo apt install -y git python3 libfuse2t64 xdg-utils
 
 # 2. Lấy script vá
 git clone https://github.com/anoda-droid/zalo-linux-sync-fix.git
@@ -131,7 +133,7 @@ Fedora/Bazzite: thay bước 1 bằng `sudo dnf install -y git python3 fuse-libs
 | Kiến trúc | x86_64 (bản port này **chưa** hỗ trợ ARM/aarch64 — xem issue #70 của repo gốc) |
 | Hệ điều hành | Ubuntu 22.04+, Linux Mint 21+, Zorin OS 17+, Debian 12+, Pop!_OS, Fedora — và WSL |
 | python3 | >= 3.6 (mặc định có sẵn trên các distro trên) |
-| libfuse2 / fuse-libs | **bắt buộc** để chạy AppImage (Ubuntu 22.04+/Mint 21+/Zorin 17+ không cài sẵn) |
+| FUSE v2 | **bắt buộc** để chạy AppImage: `libfuse2t64` (Ubuntu 24.04+/Zorin 18/Mint 22) hoặc `libfuse2` (Ubuntu 22.04/Zorin 17/Mint 21); Fedora: `fuse-libs` |
 | node | tuỳ chọn — chỉ để kiểm tra cú pháp sau khi vá |
 | 7z hoặc squashfs-tools | tuỳ chọn — chỉ dùng khi cách bung chuẩn gặp lỗi |
 | Dung lượng trống | ~2.6GB (AppImage ~264MB + bản bung ~700MB + bản cài ~700MB) |
@@ -202,7 +204,7 @@ Log chẩn đoán sau khi vá (chạy kèm `--enable-logging=stderr`, tìm `[SYN
 
 | Triệu chứng | Nguyên nhân | Cách sửa |
 |---|---|---|
-| `AppImages require FUSE to run` / AppImage không mở | thiếu libfuse2 | `sudo apt install libfuse2` (Fedora: `fuse-libs`). Hoặc chạy `./run.sh /duong/dan/Zalo-*.AppImage` — tự dùng chế độ extract-and-run |
+| `AppImages require FUSE to run` / AppImage không mở | thiếu FUSE v2 | `sudo apt install libfuse2t64` (Ubuntu 24.04+/Zorin 18) hoặc `libfuse2` (Ubuntu 22.04/Zorin 17); Fedora: `fuse-libs`. Hoặc chạy `./run.sh /duong/dan/Zalo-*.AppImage` — tự dùng chế độ extract-and-run |
 | `The SUID sandbox helper binary was found, but is not configured correctly` | chrome-sandbox không có setuid root | chạy kèm `--no-sandbox` (file `.desktop` do `install.sh` tạo đã có sẵn) |
 | `GPU process isn't usable. Goodbye.` (máy ảo / WSLg) | tăng tốc GPU không khả dụng | `ZALO_DISABLE_GPU=1 ./run.sh` |
 | Cửa sổ không hiện nhưng tiến trình vẫn chạy | lệch màn hình / WSLg | kiểm tra bằng `python3 tools/xwin.py`; thử `ZALO_OZONE=x11 ./run.sh` |

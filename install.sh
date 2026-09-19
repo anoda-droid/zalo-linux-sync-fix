@@ -40,6 +40,22 @@ if command -v apt-get >/dev/null 2>&1; then PKG="apt"
 elif command -v dnf >/dev/null 2>&1; then PKG="dnf"
 elif command -v pacman >/dev/null 2>&1; then PKG="pacman"
 fi
+
+# Tên gói FUSE khác nhau theo đời distro:
+#   Ubuntu 22.04 / Mint 21 / Zorin 17 -> libfuse2
+#   Ubuntu 24.04+ / Mint 22 / Zorin 18 -> libfuse2t64   (libfuse2 KHÔNG còn tồn tại)
+#   Fedora -> fuse-libs ; Arch -> fuse2
+FUSE_PKG="libfuse2"
+case "$PKG" in
+  apt)
+    if ! apt-cache policy libfuse2 2>/dev/null | grep -q "Candidate: [0-9]"; then
+      FUSE_PKG="libfuse2t64"
+    fi
+    ;;
+  dnf) FUSE_PKG="fuse-libs" ;;
+  pacman) FUSE_PKG="fuse2" ;;
+esac
+
 apt_hint() {
   case "$PKG" in
     apt) echo "sudo apt install -y $*" ;;
@@ -69,9 +85,10 @@ command -v curl >/dev/null 2>&1 && ok "curl" || warn "Không có curl (chỉ c�
 HAVE_FUSE=0
 ldconfig -p 2>/dev/null | grep -q "libfuse\.so\.2" && HAVE_FUSE=1
 if [ "$HAVE_FUSE" = 0 ]; then
-  warn "Chưa có libfuse2 — BẮT BUỘC để chạy AppImage dạng file:"
-  say  "        $(apt_hint libfuse2)          # Fedora: fuse-libs"
-  say  "        (Script vá vẫn chạy; run.sh có chế độ dự phòng khi thiếu FUSE.)"
+  warn "Chưa có FUSE v2 — BẮT BUỘC để chạy AppImage dạng file:"
+  say  "        $(apt_hint "$FUSE_PKG")"
+  say  "        (Ubuntu 24.04+/Zorin 18/Mint 22 dùng libfuse2t64; Ubuntu 22.04/Zorin 17 dùng libfuse2)"
+  say  "        Script vá vẫn chạy; run.sh có chế độ dự phòng khi thiếu FUSE."
 fi
 command -v xdg-settings >/dev/null 2>&1 \
   || warn "Thiếu xdg-utils (chỉ ảnh hưởng mở link bằng trình duyệt mặc định): $(apt_hint xdg-utils)"
@@ -199,7 +216,7 @@ say "   hoặc:  $RUN_PATH --no-sandbox"
 [ -f "$HERE/run.sh" ] && say "   hoặc:  $HERE/run.sh"
 if [ "$HAVE_FUSE" = 0 ]; then
   say ""
-  warn "Nhớ cài libfuse2 TRƯỚC khi chạy: $(apt_hint libfuse2)"
+  warn "Nhớ cài FUSE v2 TRƯỚC khi chạy: $(apt_hint "$FUSE_PKG")"
 fi
 say ""
 say "== Đăng nhập xong, đồng bộ tin nhắn cũ sẽ chạy. Dấu hiệu vá hoạt động:"
