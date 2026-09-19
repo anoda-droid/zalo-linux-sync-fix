@@ -33,6 +33,48 @@ File này được tạo tự động bằng CI (xem `.github/workflows/build-ap
 Zalo ra bản mới thì workflow tạo release mới. Vẫn có thể tự vá bằng script nếu muốn
 (phần dưới).
 
+## 0b. MỘT LỆNH duy nhất cho bản FULL — có luôn GỌI ĐIỆN
+
+Bản Full đóng gói sẵn Wine **bên trong AppImage** (`app/native/wine-runtime`) nên mở là
+gọi được, không cần mạng để tải wine. Dán đúng 1 dòng:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/anoda-droid/zalo-linux-sync-fix/main/install-online.sh | bash -s -- --full
+```
+
+Lệnh này tự làm hết: tải bộ cài → tải **file AppImage Full mới nhất từ GitHub** (~464MB)
+→ vá lỗi đồng bộ → kiểm chứng → cài vào menu ứng dụng. Sau đó mở **Zalo** trong menu và
+gọi thử.
+
+Bản thường (nhắn tin + đồng bộ, không cần gọi điện), cũng 1 dòng:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/anoda-droid/zalo-linux-sync-fix/main/install-online.sh | bash
+```
+
+### Điều kiện để GỌI ĐƯỢC: thư viện 32-bit
+
+Wine (kể cả bản đi kèm) dùng loader 32-bit, nên máy cần thư viện 32-bit:
+
+```bash
+# Ubuntu / Mint / Zorin / Debian
+sudo dpkg --add-architecture i386 && sudo apt update
+sudo apt install -y libc6:i386 libx11-6:i386 libxext6:i386 libfreetype6:i386 \
+  libgl1:i386 libpulse0:i386 libasound2:i386 zlib1g:i386
+# gọi CÓ HÌNH (video call): thêm
+sudo apt install -y libgstreamer1.0-0:i386 libgstreamer-plugins-base1.0-0:i386 \
+  gstreamer1.0-plugins-good:i386 libv4l-0:i386
+# khuyến nghị — giải mã H.264 của đầu bên kia
+sudo apt install -y gstreamer1.0-libav:i386
+```
+
+Fedora: `sudo dnf install -y glibc.i686 libX11.i686 libXext.i686 freetype.i686 mesa-libGL.i686 pulseaudio-libs.i686 alsa-lib.i686 zlib-ng-compat.i686`
+Arch: `sudo pacman -S --needed lib32-glibc lib32-libx11 lib32-libxext lib32-freetype2 lib32-mesa lib32-libpulse lib32-alsa-lib lib32-zlib`
+
+`install.sh --full` **tự kiểm tra** phần này và in đúng lệnh cần chạy. Đã cài wine hệ thống
+(wine ≥ 9.9 chạy được 32-bit) thì app tự dò và dùng; không có wine hệ thống vẫn gọi được
+nhờ wine đi kèm trong bản Full. Gỡ cài đặt: `rm -rf ~/.local/opt/zalo-linux ~/.local/share/applications/zalo.desktop`.
+
 ## 1. Triệu chứng
 
 - Đăng nhập được nhưng đồng bộ tin nhắn cũ từ điện thoại không chạy / chạy xong thiếu

@@ -96,6 +96,47 @@ if ! command -v 7z >/dev/null 2>&1 && ! command -v unsquashfs >/dev/null 2>&1; t
   warn "Không có 7z/unsquashfs (chỉ cần nếu cách bung chuẩn gặp lỗi): $(apt_hint p7zip-full squashfs-tools)"
 fi
 
+# ---------- 1b. Phần GỌI ĐIỆN (chỉ khi --full) ----------
+ARCH32=0
+if [ "$FULL" = 1 ]; then
+  say ""
+  say "== Kiểm tra phần GỌI ĐIỆN (zcall chạy ZaloCall.exe qua Wine)"
+  say "   Bản Full đóng gói sẵn Wine trong AppImage (app/native/wine-runtime) — mở là gọi được."
+  if command -v wine >/dev/null 2>&1; then
+    ok "wine hệ thống: $(wine --version 2>/dev/null | head -1) (app tự dò, chỉ dùng nếu chạy được 32-bit)"
+  else
+    ok "không có wine hệ thống — không sao, bản Full có wine đi kèm"
+  fi
+  for so in libc.so.6 libX11.so.6; do
+    if find /lib/i386-linux-gnu /usr/lib/i386-linux-gnu -maxdepth 1 -name "$so" 2>/dev/null | grep -q .; then
+      ARCH32=$((ARCH32+1))
+    fi
+  done
+  if [ "$ARCH32" = 2 ]; then
+    ok "có thư viện 32-bit (đủ cho gọi thoại)"
+  else
+    warn "THIẾU thư viện 32-bit — gọi điện sẽ không chạy (wine cần loader 32-bit). Chạy:"
+    case "$PKG" in
+      apt)
+        say "        sudo dpkg --add-architecture i386 && sudo apt update"
+        say "        sudo apt install -y libc6:i386 libx11-6:i386 libxext6:i386 libfreetype6:i386 libgl1:i386 libpulse0:i386 libasound2:i386 zlib1g:i386"
+        say "        # gọi có hình (video): sudo apt install -y libgstreamer1.0-0:i386 libgstreamer-plugins-base1.0-0:i386 gstreamer1.0-plugins-good:i386 libv4l-0:i386"
+        say "        # giải mã H.264:       sudo apt install -y gstreamer1.0-libav:i386"
+        ;;
+      dnf)
+        say "        sudo dnf install -y glibc.i686 libX11.i686 libXext.i686 freetype.i686 mesa-libGL.i686 pulseaudio-libs.i686 alsa-lib.i686 zlib-ng-compat.i686"
+        say "        # video: sudo dnf install -y gstreamer1.i686 gstreamer1-plugins-base.i686 gstreamer1-plugins-good.i686 libv4l.i686"
+        ;;
+      pacman)
+        say "        sudo pacman -S --needed lib32-glibc lib32-libx11 lib32-libxext lib32-freetype2 lib32-mesa lib32-libpulse lib32-alsa-lib lib32-zlib"
+        say "        # video: sudo pacman -S --needed lib32-gstreamer lib32-gst-plugins-base lib32-gst-plugins-good lib32-libv4l"
+        ;;
+      *) say "        (xem mục 'Gọi điện' trong README của repo)" ;;
+    esac
+    say "        App cũng tự hiện hộp thoại hướng dẫn khi thiếu."
+  fi
+fi
+
 AVAIL_MB="$(df -Pk "${TMPDIR:-/tmp}" 2>/dev/null | awk 'NR==2{print int($4/1024)}')"
 if [ -n "${AVAIL_MB:-}" ]; then
   [ "$AVAIL_MB" -ge "$NEED_MB" ] || die "Còn ít chỗ trống (${AVAIL_MB}MB) — cần khoảng ${NEED_MB}MB. Dọn bớt rồi chạy lại."
@@ -217,6 +258,15 @@ say "   hoặc:  $RUN_PATH --no-sandbox"
 if [ "$HAVE_FUSE" = 0 ]; then
   say ""
   warn "Nhớ cài FUSE v2 TRƯỚC khi chạy: $(apt_hint "$FUSE_PKG")"
+fi
+if [ "$FULL" = 1 ]; then
+  say ""
+  if [ "$ARCH32" = 2 ]; then
+    say "== GỌI ĐIỆN: đã sẵn sàng — mở Zalo, gọi thử 1 cuộc là biết."
+  else
+    warn "GỌI ĐIỆN: còn thiếu thư viện 32-bit ở trên — cài xong mới gọi được."
+  fi
+  say "   (App tự dò wine trong AppImage; hộp thoại thiết lập wine sẽ tự hiện nếu cần.)"
 fi
 say ""
 say "== Đăng nhập xong, đồng bộ tin nhắn cũ sẽ chạy. Dấu hiệu vá hoạt động:"
