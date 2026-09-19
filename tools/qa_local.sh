@@ -36,12 +36,12 @@ rm -rf "$T"
 
 head_ "4. Chạy khi thiếu node (cảnh báo, không chết)"
 B="$(mktemp -d)"
-for c in python3 cp mv rm mkdir df awk stat grep find chmod sed basename dirname tail head cat tr ldconfig date uname; do
+for c in bash env python3 cp mv rm mkdir df awk stat grep find chmod sed basename dirname tail head cat tr ldconfig date uname; do
   p="$(command -v $c 2>/dev/null)" && ln -sf "$p" "$B/$c"
 done
 OUT="$(PATH="$B" "$HERE/install.sh" /khong/co/that.AppImage 2>&1 || true)"
-echo "$OUT" | grep -q "Không có node" && ok "cảnh báo thiếu node" || bad "không cảnh báo thiếu node"
-echo "$OUT" | grep -q "Không thấy file" && ok "vẫn kiểm tra tiếp rồi báo thiếu AppImage" || bad "dừng sai chỗ"
+if echo "$OUT" | grep -q "Không có node"; then ok "cảnh báo thiếu node"; else bad "không cảnh báo thiếu node"; echo "$OUT" | head -5 | sed 's/^/        /'; fi
+if echo "$OUT" | grep -q "Không thấy file"; then ok "vẫn kiểm tra tiếp rồi báo thiếu AppImage"; else bad "dừng sai chỗ"; fi
 rm -rf "$B"
 
 head_ "5. Tự tải: hỏi được GitHub API (cần mạng)"
